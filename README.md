@@ -42,3 +42,4 @@ python main.py config.ini target
 ### Current features
 
 - export tables and views in Dremio to a models directory
+- update dbt_project.yml with Dremio schema

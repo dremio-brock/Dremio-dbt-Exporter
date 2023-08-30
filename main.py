@@ -10,7 +10,7 @@ from sql_metadata import Parser
 from os import makedirs
 import os
 import sqlparse
-import yaml
+import ruamel.yaml
 import logging
 
 
@@ -21,6 +21,7 @@ class DremioConfig:
         self.password = config[config_section]['password']
         self.project_id = config[config_section]['project_id']
         self.output = config[config_section]['output']
+        self.schemas = []
 
         # create url string
         if config[config_section]['ssl'] == 'true':
@@ -32,13 +33,6 @@ class DremioConfig:
 
         # create the header
         self.headers = authenticate(self)
-
-        file = self.output + '/dbt_project.yml'
-        # get dbt_project yaml
-        with open(file, 'r') as file:
-            # The FullLoader parameter handles the conversion from YAML
-            # scalar values to Python the dictionary format
-            self.dbt_project = yaml.load(file, Loader=yaml.FullLoader)
 
 
 def authenticate(self):
@@ -186,13 +180,38 @@ def get_tables(self):
 
     self.tables = tables
 
-def build_project_yaml(self, database, schema, table):
-    model = self.dbt_project['models'][self.output]
-    current_schema = ''
-    for path in schema:
-        if path not in model:
-            model[path] = {'+schema': path}
-        current_schema += "." + path
+def build_project_yaml(self):
+
+    def create_schema(schema):
+        return {'+schema': schema}
+
+    def create_nested_dicts(data, keys):
+        current_dict = data
+        for key in keys:
+            current_dict = current_dict.setdefault(key, {})
+        current_dict.update(create_schema('.'.join(keys)))
+
+    data = {}
+    for item in self.schemas:
+        keys = item.split('.')
+        create_nested_dicts(data, keys)
+
+    # Load the existing YAML file
+    file_path = self.output + '/dbt_project.yml'
+
+    # Load the existing YAML content while preserving formatting
+    yaml = ruamel.yaml.YAML()
+    with open(file_path, 'r') as file:
+        existing_data = yaml.load(file)
+
+    # Append the new data to the existing data
+    models = {'models': {self.output: data}}
+    existing_data.update(models)
+
+    # Write the updated data back to the YAML file while maintaining formatting
+    with open(file_path, 'w') as file:
+        yaml.dump(existing_data, file)
+
 
 def build_source_yaml(self, database, schema, table):
     pass
@@ -223,10 +242,13 @@ def build_model(self):
             if fq_table in source_list:
                 # todo: use database, schema, table for source yaml generation
                 database = fq_table.split('.')[0]
-                schema = fq_table.split('.')[0:-1]
+                schema = ".".join(fq_table.split('.')[0:-1])
                 table = fq_table.split('.')[-1]
-                build_project_yaml(self, database, schema, table)
-                build_source_yaml(self, database, schema, table)
+
+                if schema not in self.schemas:
+                    self.schemas.append(schema)
+                # build_project_yaml(self, schema)
+                # build_source_yaml(self, database, schema, table)
                 ref = "{{ source({'" + database + "','" + table + "') } }}"
             else:
                 ref = "{{ ref({'" + fq_table + "') } }}"
@@ -281,3 +303,6 @@ if __name__ == "__main__":
     get_tables(dremio_conn)
     get_views(dremio_conn)
     build_model(dremio_conn)
+    build_project_yaml(dremio_conn)
+
+
