@@ -1,6 +1,4 @@
-Welcome to the Dremio dbt Exporter
-
-### Using the Exporter
+### Dremio dbt Exporter
 This project will help you export an existing Dremio environment to a dbt project quickly
 
 
@@ -15,7 +13,7 @@ type = cloud
 username =
 password =
 project_id =
-output = models
+output = project
 ```
 Setup your config.ini file uisng the following for Dremio Software
 
@@ -27,10 +25,14 @@ ssl = false
 type = software
 username = dremio
 password = dremio123
-output = models
+output = project
 ```
 
 ### Running
+1. Install dbt dremio `pip install dbt-dremio`
+2. Initiate your dbt project `dbt init <project_name>`
+3. Select `dremio` as the database to use.
+
 python main.py config.ini target
 
 - arguments

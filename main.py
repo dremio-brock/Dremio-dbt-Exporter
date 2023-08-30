@@ -10,6 +10,7 @@ from sql_metadata import Parser
 from os import makedirs
 import os
 import sqlparse
+import yaml
 import logging
 
 
@@ -31,6 +32,13 @@ class DremioConfig:
 
         # create the header
         self.headers = authenticate(self)
+
+        file = self.output + '/dbt_project.yml'
+        # get dbt_project yaml
+        with open(file, 'r') as file:
+            # The FullLoader parameter handles the conversion from YAML
+            # scalar values to Python the dictionary format
+            self.dbt_project = yaml.load(file, Loader=yaml.FullLoader)
 
 
 def authenticate(self):
@@ -178,6 +186,17 @@ def get_tables(self):
 
     self.tables = tables
 
+def build_project_yaml(self, database, schema, table):
+    model = self.dbt_project['models'][self.output]
+    current_schema = ''
+    for path in schema:
+        if path not in model:
+            model[path] = {'+schema': path}
+        current_schema += "." + path
+
+def build_source_yaml(self, database, schema, table):
+    pass
+
 
 def build_model(self):
     # build list of sources
@@ -186,7 +205,7 @@ def build_model(self):
         source_list.append(".".join(table['path'].replace('[', '').replace(']', '').split(', ')))
 
     for view in self.views:
-        model_path = self.output + "/" + "/".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '')
+        model_path = self.output + "/models/" + "/".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '')
         model_name = model_path + "/" + \
                      "_".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '') + \
                      "_" + view['view_name'] + '.sql'
@@ -204,9 +223,10 @@ def build_model(self):
             if fq_table in source_list:
                 # todo: use database, schema, table for source yaml generation
                 database = fq_table.split('.')[0]
-                schema = fq_table.split('.')[1:-1]
+                schema = fq_table.split('.')[0:-1]
                 table = fq_table.split('.')[-1]
-
+                build_project_yaml(self, database, schema, table)
+                build_source_yaml(self, database, schema, table)
                 ref = "{{ source({'" + database + "','" + table + "') } }}"
             else:
                 ref = "{{ ref({'" + fq_table + "') } }}"
