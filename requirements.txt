@@ -1,0 +1,9 @@
+certifi==2023.7.22
+charset-normalizer==3.2.0
+idna==3.4
+requests==2.31.0
+ruamel.yaml==0.17.32
+ruamel.yaml.clib==0.2.7
+sql-metadata==2.8.0
+sqlparse==0.4.4
+urllib3==2.0.4

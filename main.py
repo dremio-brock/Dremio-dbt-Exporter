@@ -21,6 +21,7 @@ class DremioConfig:
         self.password = config[config_section]['password']
         self.project_id = config[config_section]['project_id']
         self.output = config[config_section]['output']
+        self.project_name = config[config_section]['project_name']
         self.schemas = []
 
         # create url string
@@ -205,7 +206,7 @@ def build_project_yaml(self):
         existing_data = yaml.load(file)
 
     # Append the new data to the existing data
-    models = {'models': {self.output: data}}
+    models = {'models': {self.project_name: data}}
     existing_data.update(models)
 
     # Write the updated data back to the YAML file while maintaining formatting
