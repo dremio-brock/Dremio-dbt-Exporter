@@ -12,17 +12,25 @@ import os
 import sqlparse
 import ruamel.yaml
 import logging
-
+import re
+import ast
 
 class DremioConfig:
     def __init__(self, config):
         self.dremio_type = config[config_section]['type']
         self.username = config[config_section]['username']
         self.password = config[config_section]['password']
-        self.project_id = config[config_section]['project_id']
-        self.output = config[config_section]['output']
         self.project_name = config[config_section]['project_name']
+
+        if self.dremio_type == 'cloud':
+            self.project_id = config[config_section]['project_id']
+        else:
+            self.project_id = None
+
+        self.output = config[config_section]['output']
         self.schemas = []
+        self.view_query = config[config_section]['view_query']
+        self.table_query = config[config_section]['table_query']
 
         # create url string
         if config[config_section]['ssl'] == 'true':
@@ -48,8 +56,8 @@ def authenticate(self):
 
         # follow software auth path
         payload = json.dumps({
-            "userName": "{{user}}",
-            "password": "{{pass}}"
+            "userName": f"{self.username}",
+            "password": f"{self.password}"
         })
         headers = {
             'Content-Type': 'application/json'
@@ -59,7 +67,7 @@ def authenticate(self):
         response = requests.request("POST", url, headers=headers, data=payload)
 
         # if valid response
-        if response.status_code == '200':
+        if response.status_code == 200:
             token = response.json()['token']
             headers = {
                 'Authorization': f'Bearer {token}',
@@ -163,23 +171,39 @@ def execute_query(self, query):
 
 
 def get_views(self):
-    if self.dremio_type == 'cloud':
-        query = 'select * from sys.project."views"'
-    else:
-        query = 'select * from sys."views"'
+    query = self.view_query
     views = execute_query(self, query)
 
     self.views = views
 
 
 def get_tables(self):
-    if self.dremio_type == 'cloud':
-        query = 'select * from sys.project."tables"'
-    else:
-        query = 'select * from sys."tables"'
+    query = self.table_query
     tables = execute_query(self, query)
 
     self.tables = tables
+
+def parse_tables_with_schema(query):
+    parsed = sqlparse.parse(query)
+    tables = []
+
+    for statement in parsed:
+        for token in statement.tokens:
+            # if isinstance(token, sqlparse.sql.IdentifierList):
+            #     for identifier in token.get_identifiers():
+            #         full_table = ""
+            #         for part in identifier.flatten():
+            #             if part != identifier.get_alias():
+            #                 full_table += part.value.strip()
+            #         tables.append(full_table)
+            if isinstance(token, sqlparse.sql.Identifier):
+                full_table = ""
+                for part in token.flatten():
+                    if part != token.get_alias():
+                        full_table += part.value.strip()
+                tables.append(full_table)
+
+    return tables
 
 def build_project_yaml(self):
 
@@ -194,11 +218,11 @@ def build_project_yaml(self):
 
     data = {}
     for item in self.schemas:
-        keys = item.split('.')
+        keys = re.findall(r'"(.*?)"', item)
         create_nested_dicts(data, keys)
 
     # Load the existing YAML file
-    file_path = self.output + '/dbt_project.yml'
+    file_path = self.output + '/' + self.project_name +'/dbt_project.yml'
 
     # Load the existing YAML content while preserving formatting
     yaml = ruamel.yaml.YAML()
@@ -222,10 +246,11 @@ def build_model(self):
     # build list of sources
     source_list = []
     for table in self.tables:
+        # source_list.append(ast.literal_eval(table['path']))
         source_list.append(".".join(table['path'].replace('[', '').replace(']', '').split(', ')))
 
     for view in self.views:
-        model_path = self.output + "/models/" + "/".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '')
+        model_path = self.output + "/" + self.project_name + "/model/" + "/".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '')
         model_name = model_path + "/" + \
                      "_".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '') + \
                      "_" + view['view_name'] + '.sql'
@@ -233,40 +258,44 @@ def build_model(self):
         #  parents
         # todo: look at CTE statements
         sql_obj = Parser(view['sql_definition'])
-        tables = Parser(view['sql_definition']).tables
+
+        # This does not work due to tables with . and - that require double quotes
+        #tables = Parser(view['sql_definition']).tables
+
+        tables = parse_tables_with_schema(view['sql_definition'].replace(")", "").replace("(", ""))
 
         # change quotes to dremio formatted qoutes
         new_sql = sql_obj.query.replace('`', '"')
 
         # loop through fully qualified list of tables and replace with source / reference identifiers
         for fq_table in tables:
-            if fq_table in source_list:
+            unquoted_table = fq_table.replace('"','')
+            if unquoted_table in source_list:
                 # todo: use database, schema, table for source yaml generation
-                database = fq_table.split('.')[0]
-                schema = ".".join(fq_table.split('.')[0:-1])
-                table = fq_table.split('.')[-1]
+                table_parts = re.findall(r'"(.*?)"', fq_table)
+                database = table_parts[0]
+                schema = '"' + '"."'.join(table_parts[0:-1]) + '"'
+                table = table_parts[-1]
 
                 if schema not in self.schemas:
                     self.schemas.append(schema)
-                # build_project_yaml(self, schema)
-                # build_source_yaml(self, database, schema, table)
                 ref = "{{ source({'" + database + "','" + table + "') } }}"
             else:
-                ref = "{{ ref({'" + fq_table + "') } }}"
+                ref = "{{ ref({'" + unquoted_table.replace('.', '_') + "') } }}"
 
 
             # Add double qoutes where needed
-            table_list_formatted = []
-            for x in fq_table.split('.'):
-                if ' ' in x or '-' in x or '_' in x:
-                    table_list_formatted.append('"' + x + '"')
-                else:
-                    table_list_formatted.append(x)
+            # table_list_formatted = []
+            # for x in fq_table.split('.'):
+            #     if ' ' in x or '-' in x or '_' in x:
+            #         table_list_formatted.append('"' + x + '"')
+            #     else:
+            #         table_list_formatted.append(x)
 
-            fq_table_formatted = ".".join(table_list_formatted)
+            #fq_table_formatted = ".".join(table_list_formatted)
 
             # replace old references
-            new_sql = new_sql.replace(fq_table_formatted, ref)
+            new_sql = new_sql.replace(fq_table, ref)
 
         # format sql
         final_sql = sqlparse.format(new_sql, reindent=True)
@@ -284,11 +313,10 @@ def build_model(self):
 if __name__ == "__main__":
     # parse input arguments for config file location
     parser = argparse.ArgumentParser(
-        prog='ProgramName',
-        description='What the program does',
-        epilog='Text at the bottom of help')
-    parser.add_argument('config', default='config.ini')
-    parser.add_argument('target')
+        prog='dremio-dbt-exporter',
+        description='exports an existing dremio enviroment to a dbt model')
+    parser.add_argument('-config', default='config.ini')
+    parser.add_argument('-target')
 
     # read args
     args = parser.parse_args()
