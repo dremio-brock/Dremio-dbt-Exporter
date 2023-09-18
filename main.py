@@ -186,6 +186,7 @@ def get_tables(self):
 def parse_tables_with_schema(query):
     parsed = sqlparse.parse(query)
     tables = []
+    table_alias = ''
 
     for statement in parsed:
         for token in statement.tokens:
@@ -198,10 +199,17 @@ def parse_tables_with_schema(query):
             #         tables.append(full_table)
             if isinstance(token, sqlparse.sql.Identifier):
                 full_table = ""
-                for part in token.flatten():
-                    if part != token.get_alias():
-                        full_table += part.value.strip()
-                tables.append(full_table)
+                token_list = list(token.flatten())
+                token_length = len(token_list)
+                for i, part in enumerate(token.flatten()):
+                    if i != token_length - 1:
+                        full_table += part.value
+                    elif token.get_alias():
+                        table_alias = full_table + part.value
+                    else:
+                        full_table += part.value
+                        table_alias = full_table + part.value
+                tables.append((full_table.strip(), table_alias.strip()))
 
     return tables
 
@@ -262,43 +270,59 @@ def build_model(self):
         # This does not work due to tables with . and - that require double quotes
         #tables = Parser(view['sql_definition']).tables
 
-        tables = parse_tables_with_schema(view['sql_definition'].replace(")", "").replace("(", ""))
+        query_tables = parse_tables_with_schema(view['sql_definition'].replace(")", "").replace("(", ""))
+
+        new_query = view['sql_definition']
+
+        # returns tuple with full path, full path + alias
+        for query_table in query_tables:
+
+            # get split the table into parts, only when . is not between quotes
+            table_parts = re.findall(r'"(.*?)"', query_table[0])
+            database = table_parts[0]
+            schema = '"' + '"."'.join(table_parts[0:-1]) + '"'
+            table = table_parts[-1]
+            dbt_ref = table.replace('"', '').replace('.', '_')
+
+            if schema not in self.schemas:
+                self.schemas.append(schema)
+                ref = "{{ source('" + database + "','" + table + "') }}"
+            else:
+                ref = "{{ ref('" + dbt_ref + "') }}"
+
+            # use query_table[0] to keep alias
+            new_query = new_query.replace(query_table[0], ref)
+
+
+
 
         # change quotes to dremio formatted qoutes
-        new_sql = sql_obj.query.replace('`', '"')
+        # new_sql = sql_obj.query.replace('`', '"')
+
+
 
         # loop through fully qualified list of tables and replace with source / reference identifiers
-        for fq_table in tables:
-            unquoted_table = fq_table.replace('"','')
-            if unquoted_table in source_list:
-                # todo: use database, schema, table for source yaml generation
-                table_parts = re.findall(r'"(.*?)"', fq_table)
-                database = table_parts[0]
-                schema = '"' + '"."'.join(table_parts[0:-1]) + '"'
-                table = table_parts[-1]
-
-                if schema not in self.schemas:
-                    self.schemas.append(schema)
-                ref = "{{ source({'" + database + "','" + table + "') } }}"
-            else:
-                ref = "{{ ref({'" + unquoted_table.replace('.', '_') + "') } }}"
-
-
-            # Add double qoutes where needed
-            # table_list_formatted = []
-            # for x in fq_table.split('.'):
-            #     if ' ' in x or '-' in x or '_' in x:
-            #         table_list_formatted.append('"' + x + '"')
-            #     else:
-            #         table_list_formatted.append(x)
-
-            #fq_table_formatted = ".".join(table_list_formatted)
-
-            # replace old references
-            new_sql = new_sql.replace(fq_table, ref)
+        # for fq_table in tables:
+        #     unquoted_table = fq_table.replace('"','')
+        #     if unquoted_table in source_list:
+        #         # todo: use database, schema, table for source yaml generation
+        #         table_parts = re.findall(r'"(.*?)"', fq_table[0])
+        #         database = table_parts[0]
+        #         schema = '"' + '"."'.join(table_parts[0:-1]) + '"'
+        #         table = table_parts[-1]
+        #
+        #         if schema not in self.schemas:
+        #             self.schemas.append(schema)
+        #         ref = "{{ source('" + database + "','" + table + "') }}"
+        #     else:
+        #         ref = "{{ ref('" + unquoted_table.replace('.', '_') + "') }}"
+        #
+        #     # replace references
+        #     for table in fq_table:
+        #         new_sql = new_sql.replace(table, ref)
 
         # format sql
-        final_sql = sqlparse.format(new_sql, reindent=True)
+        final_sql = sqlparse.format(new_query, reindent=True)
 
         # create the new directories as needed
         is_exist = os.path.exists(model_path)
