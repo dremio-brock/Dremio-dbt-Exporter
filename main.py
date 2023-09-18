@@ -278,7 +278,9 @@ def build_model(self):
         for query_table in query_tables:
 
             # get split the table into parts, only when . is not between quotes
-            table_parts = re.findall(r'"(.*?)"', query_table[0])
+            #T TODO: do analysis on query context, to determine if the path is fully qualified or not
+            #table_parts = re.findall(r'"(.*?)"', query_table[0])
+            table_parts = re.split(r'\.(?=(?:(?:[^"]*"){2})*[^"]*$)', query_table[0])
             database = table_parts[0]
             schema = '"' + '"."'.join(table_parts[0:-1]) + '"'
             table = table_parts[-1]
@@ -292,34 +294,6 @@ def build_model(self):
 
             # use query_table[0] to keep alias
             new_query = new_query.replace(query_table[0], ref)
-
-
-
-
-        # change quotes to dremio formatted qoutes
-        # new_sql = sql_obj.query.replace('`', '"')
-
-
-
-        # loop through fully qualified list of tables and replace with source / reference identifiers
-        # for fq_table in tables:
-        #     unquoted_table = fq_table.replace('"','')
-        #     if unquoted_table in source_list:
-        #         # todo: use database, schema, table for source yaml generation
-        #         table_parts = re.findall(r'"(.*?)"', fq_table[0])
-        #         database = table_parts[0]
-        #         schema = '"' + '"."'.join(table_parts[0:-1]) + '"'
-        #         table = table_parts[-1]
-        #
-        #         if schema not in self.schemas:
-        #             self.schemas.append(schema)
-        #         ref = "{{ source('" + database + "','" + table + "') }}"
-        #     else:
-        #         ref = "{{ ref('" + unquoted_table.replace('.', '_') + "') }}"
-        #
-        #     # replace references
-        #     for table in fq_table:
-        #         new_sql = new_sql.replace(table, ref)
 
         # format sql
         final_sql = sqlparse.format(new_query, reindent=True)
