@@ -262,9 +262,7 @@ def build_model(self):
         model_name = model_path + "/" + \
                      "_".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '') + \
                      "_" + view['view_name'] + '.sql'
-        # todo: use the context and validate the fully qualified path. We may need to revise the SQL with the correct
-        #  parents
-        # todo: look at CTE statements
+        # TODO: look at CTE statements
         sql_obj = Parser(view['sql_definition'])
 
         # This does not work due to tables with . and - that require double quotes
@@ -276,11 +274,13 @@ def build_model(self):
 
         # returns tuple with full path, full path + alias
         for query_table in query_tables:
+            # Check if the context should be used, dremio always defaults to context source.
+            if view['sql_context'] + "." + query_table[0] in source_list:
+                context_table = view['sql_context'] + "." + query_table[0]
+                table_parts = re.split(r'\.(?=(?:(?:[^"]*"){2})*[^"]*$)', context_table)
+            else:
+                table_parts = re.split(r'\.(?=(?:(?:[^"]*"){2})*[^"]*$)', query_table[0])
 
-            # get split the table into parts, only when . is not between quotes
-            #T TODO: do analysis on query context, to determine if the path is fully qualified or not
-            #table_parts = re.findall(r'"(.*?)"', query_table[0])
-            table_parts = re.split(r'\.(?=(?:(?:[^"]*"){2})*[^"]*$)', query_table[0])
             database = table_parts[0]
             schema = '"' + '"."'.join(table_parts[0:-1]) + '"'
             table = table_parts[-1]
