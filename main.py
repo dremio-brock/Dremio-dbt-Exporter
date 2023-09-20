@@ -16,6 +16,9 @@ import re
 import ast
 
 class DremioConfig:
+    #TODO:
+    # Permissions
+    # Reflections
     def __init__(self, config):
         self.dremio_type = config[config_section]['type']
         self.username = config[config_section]['username']
@@ -184,6 +187,7 @@ def get_tables(self):
     self.tables = tables
 
 def parse_tables_with_schema(query):
+    #TODO: Add CTE support
     parsed = sqlparse.parse(query)
     tables = []
     table_alias = ''
@@ -226,7 +230,8 @@ def build_project_yaml(self):
 
     data = {}
     for item in self.schemas:
-        keys = re.findall(r'"(.*?)"', item)
+        # keys = re.findall(r'"(.*?)"', item)
+        keys = item
         create_nested_dicts(data, keys)
 
     # Load the existing YAML file
@@ -249,20 +254,56 @@ def build_project_yaml(self):
 def build_source_yaml(self, database, schema, table):
     pass
 
-
 def build_model(self):
     # build list of sources
     source_list = []
     for table in self.tables:
-        # source_list.append(ast.literal_eval(table['path']))
-        source_list.append(".".join(table['path'].replace('[', '').replace(']', '').split(', ')))
+        # save the quoted path and unquoted path
+        for table_path in table['path']:
+            if '-' in table_path or '.' in table_path or '':
+        source_list.append(
+            [
+                ".".join(table['path'].replace('[', '').replace(']', '').split(', ')),
+                table['path']
+            ]
+        )
 
     for view in self.views:
         model_path = self.output + "/" + self.project_name + "/model/" + "/".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '')
         model_name = model_path + "/" + \
                      "_".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '') + \
                      "_" + view['view_name'] + '.sql'
-        # TODO: look at CTE statements
+
+        sql_obj = Parser(view['sql_definition'])
+        context_table = None
+        for query_table in sql_obj.tables:
+            # Check if the context should be used, dremio always defaults to context source.
+            for source_table in source_list:
+                context_table = view['sql_context'] + "." + query_table
+                if context_table == source_table[1]:
+                    table = source_table[0]
+
+            if view['sql_context'] + "." + query_table in source_list[1]:
+                context_table = None
+
+
+            database = None
+            schema = None
+            dbt_ref = None
+
+
+def build_model_old(self):
+    # build list of sources
+    source_list = []
+    for table in self.tables:
+        source_list.append(ast.literal_eval(table['path']))
+
+
+    for view in self.views:
+        model_path = self.output + "/" + self.project_name + "/model/" + "/".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '')
+        model_name = model_path + "/" + \
+                     "_".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '') + \
+                     "_" + view['view_name'] + '.sql'
         sql_obj = Parser(view['sql_definition'])
 
         # This does not work due to tables with . and - that require double quotes
