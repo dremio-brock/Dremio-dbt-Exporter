@@ -46,6 +46,52 @@ class DremioConfig:
         # create the header
         self.headers = authenticate(self)
 
+        # Dremio reserved words
+        self.dremio_reserved = {'abs', 'all', 'allocate', 'allow', 'alter', 'and', 'any', 'are', 'array',
+                       'array_max_cardinality', 'as', 'asensitivelo', 'asymmetric', 'at', 'atomic', 'authorization',
+                       'avg', 'begin', 'begin_frame', 'begin_partition', 'between', 'bigint', 'binary', 'bit', 'blob',
+                       'boolean', 'both', 'by', 'call', 'called', 'cardinality', 'cascaded', 'case', 'cast', 'ceil',
+                       'ceiling', 'char', 'char_length', 'character', 'character_length', 'check', 'classifier',
+                       'clob', 'close', 'coalesce', 'collate', 'collect', 'column', 'commit', 'condition', 'connect',
+                       'constraint', 'contains', 'convert', 'corr', 'corresponding', 'count', 'covar_pop',
+                       'covar_samp', 'create', 'cross', 'cube', 'cume_dist', 'current', 'current_catalog',
+                       'current_date', 'current_default_transform_group', 'current_path', 'current_role',
+                       'current_row', 'current_schema', 'current_time', 'current_timestamp',
+                       'current_transform_group_for_type', 'current_user', 'cursor', 'cycle', 'date', 'day',
+                       'deallocate', 'dec', 'decimal', 'declare', 'default', 'define', 'delete', 'dense_rank',
+                       'deref', 'describe', 'deterministic', 'disallow', 'disconnect', 'distinct', 'double', 'drop',
+                       'dynamic', 'each', 'element', 'else', 'empty', 'end', 'end-exec', 'end_frame', 'end_partition',
+                       'equals', 'escape', 'every', 'except', 'exec', 'execute', 'exists', 'exp', 'explain', 'extend',
+                       'external', 'extract', 'false', 'fetch', 'filter', 'first_value', 'float', 'floor', 'for',
+                       'foreign', 'frame_row', 'free', 'from', 'full', 'function', 'fusion', 'get', 'global', 'grant',
+                       'group', 'grouping', 'groups', 'having', 'hold', 'hour', 'identity', 'import', 'in',
+                       'indicator', 'initial', 'inner', 'inout', 'insensitive', 'insert', 'int', 'integer',
+                       'intersect', 'intersection', 'interval', 'into', 'is', 'join', 'lag', 'language', 'large',
+                       'last_value', 'lateral', 'lead', 'leading', 'left', 'like', 'like_regex', 'limit', 'ln',
+                       'local', 'localtime', 'localtimestamp', 'lower', 'match', 'matches', 'match_number',
+                       'match_recognize', 'max', 'measures', 'member', 'merge', 'method', 'min', 'minute', 'mod',
+                       'modifies', 'module', 'month', 'more', 'multiset', 'national', 'natural', 'nchar', 'nclob',
+                       'new', 'next', 'no', 'none', 'normalize', 'not', 'nth_value', 'ntile', 'null', 'nullif',
+                       'numeric', 'occurrences_regex', 'octet_length', 'of', 'offset', 'old', 'omit', 'on', 'one',
+                       'only', 'open', 'or', 'order', 'out', 'outer', 'over', 'overlaps', 'overlay', 'parameter',
+                       'partition', 'pattern', 'per', 'percent', 'percentile_cont', 'percentile_disc', 'percent_rank',
+                       'period', 'permute', 'portion', 'position', 'position_regex', 'power', 'precedes', 'precision',
+                       'prepare', 'prev', 'primary', 'procedure', 'range', 'rank', 'reads', 'real', 'recursive',
+                       'ref', 'references', 'referencing', 'regr_avgx', 'regr_avgy', 'regr_count', 'regr_intercept',
+                       'regr_r2', 'regr_slope', 'regr_sxx', 'regr_sxy', 'regr_syy', 'release', 'reset', 'result',
+                       'return', 'returns', 'revoke', 'right', 'rollback', 'rollup', 'row', 'row_number', 'rows',
+                       'running', 'savepoint', 'scope', 'scroll', 'search', 'second', 'seek', 'select', 'sensitive',
+                       'session_user', 'set', 'minus', 'show', 'similar', 'skip', 'smallint', 'some', 'specific',
+                       'specifictype', 'sql', 'sqlexception', 'sqlstate', 'sqlwarning', 'sqrt', 'start', 'static',
+                       'stddev_pop', 'stddev_samp', 'stream', 'submultiset', 'subset', 'substring', 'substring_regex',
+                       'succeeds', 'sum', 'symmetric', 'system', 'system_time', 'system_user', 'table', 'tablesample',
+                       'then', 'time', 'timestamp', 'timezone_hour', 'timezone_minute', 'tinyint', 'to', 'trailing',
+                       'translate', 'translate_regex', 'translation', 'treat', 'trigger', 'trim', 'trim_array',
+                       'true', 'truncate', 'uescape', 'union', 'unique', 'unknown', 'unnest', 'update', 'upper',
+                       'upsert', 'user', 'using', 'value', 'values', 'value_of', 'var_pop', 'var_samp', 'varbinary',
+                       'varchar', 'varying', 'versioning', 'when', 'whenever', 'where', 'width_bucket', 'window',
+                       'with', 'within', 'without', 'year'}
+
 
 def authenticate(self):
     if self.dremio_type == 'cloud':
@@ -217,6 +263,36 @@ def parse_tables_with_schema(query):
 
     return tables
 
+
+def contains_non_alphanumeric(input_string):
+    # Define a regular expression pattern to match non-alphanumeric characters
+    pattern = r'[^a-zA-Z0-9_]'
+
+    # Use the re.search() function to find the first match
+    match = re.search(pattern, input_string)
+
+    # If a match is found, return True (contains non-alphanumeric characters)
+    # Otherwise, return False (only contains alphanumeric characters)
+    return bool(match)
+
+
+def build_parent_list(parent_path):
+    # save the quoted path and unquoted path
+    path_list = ast.literal_eval('[' + ', '.join(['"' + item.strip() + '"' for item in parent_path[1:-1].split(',')]) + ']')
+    quoted_path_list = []
+    for path in path_list:
+        if contains_non_alphanumeric(path):
+            quoted_path_list.append(f'"{path}"')
+        else:
+            quoted_path_list.append(path)
+    quoted_path = ".".join(quoted_path_list)
+    unquoted_path = ".".join(path_list)
+
+    # Create list of untouched path and quoted path
+    return {'unquoted': unquoted_path,
+        'quoted': quoted_path}
+
+
 def build_project_yaml(self):
 
     def create_schema(schema):
@@ -257,16 +333,13 @@ def build_source_yaml(self, database, schema, table):
 def build_model(self):
     # build list of sources
     source_list = []
+
     for table in self.tables:
-        # save the quoted path and unquoted path
-        for table_path in table['path']:
-            if '-' in table_path or '.' in table_path or '':
-        source_list.append(
-            [
-                ".".join(table['path'].replace('[', '').replace(']', '').split(', ')),
-                table['path']
-            ]
-        )
+        source_list.append(build_parent_list(table['path']))
+
+    for table in self.views:
+        source_list.append(build_parent_list(table['path']))
+
 
     for view in self.views:
         model_path = self.output + "/" + self.project_name + "/model/" + "/".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '')
@@ -275,21 +348,61 @@ def build_model(self):
                      "_" + view['view_name'] + '.sql'
 
         sql_obj = Parser(view['sql_definition'])
-        context_table = None
+        new_query = sql_obj.query
+
         for query_table in sql_obj.tables:
+
             # Check if the context should be used, dremio always defaults to context source.
-            for source_table in source_list:
+            if view['sql_context']:
                 context_table = view['sql_context'] + "." + query_table
-                if context_table == source_table[1]:
-                    table = source_table[0]
-
-            if view['sql_context'] + "." + query_table in source_list[1]:
+            else:
                 context_table = None
+            for source_table in source_list:
+                if context_table == source_table['unquoted']:
+                    full_table = source_table['quoted']
+                elif query_table == source_table['unquoted']:
+                    full_table = source_table['quoted']
+
+            #split back into parts
+            table_parts = re.split(r'\.(?=(?:(?:[^"]*"){2})*[^"]*$)', full_table)
 
 
-            database = None
-            schema = None
-            dbt_ref = None
+            database = table_parts[0]
+            schema = '.'.join(table_parts[0:-1])
+            table = table_parts[-1]
+            dbt_ref = table.replace('"', '').replace('.', '_')
+
+            if schema not in self.schemas:
+                self.schemas.append(schema)
+                ref = "{{ source('" + database + "','" + table + "') }}"
+            else:
+                ref = "{{ ref('" + dbt_ref + "') }}"
+
+            for value in self.dremio_reserved:
+                # Create a regular expression pattern that matches the reserved word with optional space, comma, or period separators
+                # pattern = rf'(?<=[`])({re.escape(value)})(?=[`])'
+
+                # Create a regular expression pattern that matches the reserved word surrounded by backticks
+                pattern = rf'`({re.escape(value)})`'
+
+                # Replace using re.sub() with the pattern
+                new_query = re.sub(pattern, r'"\1"', new_query)
+
+            # use query_table[0] to keep alias
+            new_query = new_query.replace("`", "").replace(query_table, ref)
+
+
+        # format sql
+        final_sql = sqlparse.format(new_query, reindent=True)
+
+        # create the new directories as needed
+        is_exist = os.path.exists(model_path)
+        if not is_exist:
+            makedirs(model_path)
+
+        # write the new model file
+        with open(model_name, "w") as file:
+            file.write(final_sql)
 
 
 def build_model_old(self):
