@@ -405,63 +405,6 @@ def build_model(self):
             file.write(final_sql)
 
 
-def build_model_old(self):
-    # build list of sources
-    source_list = []
-    for table in self.tables:
-        source_list.append(ast.literal_eval(table['path']))
-
-
-    for view in self.views:
-        model_path = self.output + "/" + self.project_name + "/model/" + "/".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '')
-        model_name = model_path + "/" + \
-                     "_".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '') + \
-                     "_" + view['view_name'] + '.sql'
-        sql_obj = Parser(view['sql_definition'])
-
-        # This does not work due to tables with . and - that require double quotes
-        #tables = Parser(view['sql_definition']).tables
-
-        query_tables = parse_tables_with_schema(view['sql_definition'].replace(")", "").replace("(", ""))
-
-        new_query = view['sql_definition']
-
-        # returns tuple with full path, full path + alias
-        for query_table in query_tables:
-            # Check if the context should be used, dremio always defaults to context source.
-            if view['sql_context'] + "." + query_table[0] in source_list:
-                context_table = view['sql_context'] + "." + query_table[0]
-                table_parts = re.split(r'\.(?=(?:(?:[^"]*"){2})*[^"]*$)', context_table)
-            else:
-                table_parts = re.split(r'\.(?=(?:(?:[^"]*"){2})*[^"]*$)', query_table[0])
-
-            database = table_parts[0]
-            schema = '"' + '"."'.join(table_parts[0:-1]) + '"'
-            table = table_parts[-1]
-            dbt_ref = table.replace('"', '').replace('.', '_')
-
-            if schema not in self.schemas:
-                self.schemas.append(schema)
-                ref = "{{ source('" + database + "','" + table + "') }}"
-            else:
-                ref = "{{ ref('" + dbt_ref + "') }}"
-
-            # use query_table[0] to keep alias
-            new_query = new_query.replace(query_table[0], ref)
-
-        # format sql
-        final_sql = sqlparse.format(new_query, reindent=True)
-
-        # create the new directories as needed
-        is_exist = os.path.exists(model_path)
-        if not is_exist:
-            makedirs(model_path)
-
-        # write the new model file
-        with open(model_name, "w") as file:
-            file.write(final_sql)
-
-
 if __name__ == "__main__":
     # parse input arguments for config file location
     parser = argparse.ArgumentParser(
