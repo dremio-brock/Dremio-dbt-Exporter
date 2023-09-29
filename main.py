@@ -335,10 +335,18 @@ def build_model(self):
     source_list = []
 
     for table in self.tables:
-        source_list.append(build_parent_list(table['path']))
+        source_list.append({'source': build_parent_list(table['path']),
+                            'type': 'table'})
 
-    for table in self.views:
-        source_list.append(build_parent_list(table['path']))
+
+    for view in self.views:
+        source_list.append({'source': build_parent_list(view['path']),
+                            'type': 'view'})
+        path_list = ast.literal_eval(
+            '[' + ', '.join(['"' + item.strip() + '"' for item in view['path'][1:-1].split(',')]) + ']')
+        schema = path_list[0:-1]
+        if schema not in self.schemas:
+            self.schemas.append(schema)
 
 
     for view in self.views:
@@ -351,17 +359,19 @@ def build_model(self):
         new_query = sql_obj.query
 
         for query_table in sql_obj.tables:
-
+            table_type = None
             # Check if the context should be used, dremio always defaults to context source.
             if view['sql_context']:
                 context_table = view['sql_context'] + "." + query_table
             else:
                 context_table = None
             for source_table in source_list:
-                if context_table == source_table['unquoted']:
-                    full_table = source_table['quoted']
-                elif query_table == source_table['unquoted']:
-                    full_table = source_table['quoted']
+                if context_table == source_table['source']['unquoted']:
+                    full_table = source_table['source']['quoted']
+                    table_type = source_table['type']
+                elif query_table == source_table['source']['unquoted']:
+                    full_table = source_table['source']['quoted']
+                    table_type = source_table['type']
 
             #split back into parts
             table_parts = re.split(r'\.(?=(?:(?:[^"]*"){2})*[^"]*$)', full_table)
@@ -372,16 +382,14 @@ def build_model(self):
             table = table_parts[-1]
             dbt_ref = table.replace('"', '').replace('.', '_')
 
-            if schema not in self.schemas:
-                self.schemas.append(schema)
+            if table_type == 'view':
+                ref = "{{ ref('" + dbt_ref + "') }}"
+            elif table_type == 'table':
                 ref = "{{ source('" + database + "','" + table + "') }}"
             else:
-                ref = "{{ ref('" + dbt_ref + "') }}"
+                print('failed')
 
             for value in self.dremio_reserved:
-                # Create a regular expression pattern that matches the reserved word with optional space, comma, or period separators
-                # pattern = rf'(?<=[`])({re.escape(value)})(?=[`])'
-
                 # Create a regular expression pattern that matches the reserved word surrounded by backticks
                 pattern = rf'`({re.escape(value)})`'
 
@@ -409,7 +417,7 @@ if __name__ == "__main__":
     # parse input arguments for config file location
     parser = argparse.ArgumentParser(
         prog='dremio-dbt-exporter',
-        description='exports an existing dremio enviroment to a dbt model')
+        description='exports an existing dremio environment to a dbt model')
     parser.add_argument('-config', default='config.ini')
     parser.add_argument('-target')
 
