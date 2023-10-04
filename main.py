@@ -33,7 +33,9 @@ class DremioConfig:
         self.output = config[config_section]['output']
         self.schemas = []
         self.view_query = config[config_section]['view_query']
+        self.view_filter = config[config_section]['view_filter']
         self.table_query = config[config_section]['table_query']
+        self.table_filter = config[config_section]['table_filter']
 
         # create url string
         if config[config_section]['ssl'] == 'true':
@@ -226,42 +228,25 @@ def get_views(self):
     self.views = views
 
 
+def get_filtered_views(self):
+    query = f'{self.view_query} {self.view_filter}'
+    views = execute_query(self, query)
+
+    self.filtered_views = views
+
+
 def get_tables(self):
     query = self.table_query
     tables = execute_query(self, query)
 
     self.tables = tables
 
-def parse_tables_with_schema(query):
-    #TODO: Add CTE support
-    parsed = sqlparse.parse(query)
-    tables = []
-    table_alias = ''
 
-    for statement in parsed:
-        for token in statement.tokens:
-            # if isinstance(token, sqlparse.sql.IdentifierList):
-            #     for identifier in token.get_identifiers():
-            #         full_table = ""
-            #         for part in identifier.flatten():
-            #             if part != identifier.get_alias():
-            #                 full_table += part.value.strip()
-            #         tables.append(full_table)
-            if isinstance(token, sqlparse.sql.Identifier):
-                full_table = ""
-                token_list = list(token.flatten())
-                token_length = len(token_list)
-                for i, part in enumerate(token.flatten()):
-                    if i != token_length - 1:
-                        full_table += part.value
-                    elif token.get_alias():
-                        table_alias = full_table + part.value
-                    else:
-                        full_table += part.value
-                        table_alias = full_table + part.value
-                tables.append((full_table.strip(), table_alias.strip()))
+def get_filtered_tables(self):
+    query = f'{self.table_query} {self.table_filter}'
+    tables = execute_query(self, query)
 
-    return tables
+    self.filtered_tables = tables
 
 
 def contains_non_alphanumeric(input_string):
@@ -330,6 +315,7 @@ def build_project_yaml(self):
 def build_source_yaml(self, database, schema, table):
     pass
 
+
 def build_model(self):
     # build list of sources
     source_list = []
@@ -337,7 +323,6 @@ def build_model(self):
     for table in self.tables:
         source_list.append({'source': build_parent_list(table['path']),
                             'type': 'table'})
-
 
     for view in self.views:
         source_list.append({'source': build_parent_list(view['path']),
@@ -348,9 +333,9 @@ def build_model(self):
         if schema not in self.schemas:
             self.schemas.append(schema)
 
-
-    for view in self.views:
-        model_path = self.output + "/" + self.project_name + "/model/" + "/".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '')
+    for view in self.filtered_views:
+        model_path = self.output + "/" + self.project_name + "/models/" + "/".join(view['path'].split(', ')[0:-1])\
+            .replace('[', '').replace(']', '')
         model_name = model_path + "/" + \
                      "_".join(view['path'].split(', ')[0:-1]).replace('[', '').replace(']', '') + \
                      "_" + view['view_name'] + '.sql'
@@ -360,45 +345,48 @@ def build_model(self):
 
         for query_table in sql_obj.tables:
             table_type = None
+            full_table = None
             # Check if the context should be used, dremio always defaults to context source.
             if view['sql_context']:
                 context_table = view['sql_context'] + "." + query_table
             else:
                 context_table = None
+
             for source_table in source_list:
                 if context_table == source_table['source']['unquoted']:
                     full_table = source_table['source']['quoted']
                     table_type = source_table['type']
+                    break
                 elif query_table == source_table['source']['unquoted']:
                     full_table = source_table['source']['quoted']
                     table_type = source_table['type']
+                    break
 
-            #split back into parts
-            table_parts = re.split(r'\.(?=(?:(?:[^"]*"){2})*[^"]*$)', full_table)
+            if full_table != None:
+                #split back into parts
+                table_parts = re.split(r'\.(?=(?:(?:[^"]*"){2})*[^"]*$)', full_table)
 
+                database = table_parts[0]
+                table = table_parts[-1]
+                dbt_ref = table.replace('"', '').replace('.', '_')
 
-            database = table_parts[0]
-            schema = '.'.join(table_parts[0:-1])
-            table = table_parts[-1]
-            dbt_ref = table.replace('"', '').replace('.', '_')
+                for value in self.dremio_reserved:
+                    # Create a regular expression pattern that matches the reserved word surrounded by backticks
+                    pattern = rf'`({re.escape(value)})`'
 
-            if table_type == 'view':
-                ref = "{{ ref('" + dbt_ref + "') }}"
-            elif table_type == 'table':
-                ref = "{{ source('" + database + "','" + table + "') }}"
-            else:
-                print('failed')
+                    # Replace using re.sub() with the pattern
+                    new_query = re.sub(pattern, r'"\1"', new_query)
 
-            for value in self.dremio_reserved:
-                # Create a regular expression pattern that matches the reserved word surrounded by backticks
-                pattern = rf'`({re.escape(value)})`'
+                new_query = new_query.replace("`", '')
 
-                # Replace using re.sub() with the pattern
-                new_query = re.sub(pattern, r'"\1"', new_query)
-
-            # use query_table[0] to keep alias
-            new_query = new_query.replace("`", "").replace(query_table, ref)
-
+                if table_type == 'view':
+                    ref = "{{ ref('" + dbt_ref + "') }}"
+                    new_query = new_query.replace(query_table, ref)
+                elif table_type == 'table':
+                    ref = "{{ source('" + database + "','" + table + "') }}"
+                    new_query = new_query.replace(query_table, ref)
+                else:
+                    print(f'{query_table} failed to match in {model_name}')
 
         # format sql
         final_sql = sqlparse.format(new_query, reindent=True)
@@ -432,9 +420,17 @@ if __name__ == "__main__":
 
     # set config
     dremio_conn = DremioConfig(config)
+    print("Getting tables")
     get_tables(dremio_conn)
+    print("Getting views")
     get_views(dremio_conn)
+    print("Getting filtered tables")
+    get_filtered_tables(dremio_conn)
+    print("Getting filterd views")
+    get_filtered_views(dremio_conn)
+    print("building model")
     build_model(dremio_conn)
+    print("building project_yaml")
     build_project_yaml(dremio_conn)
 
 

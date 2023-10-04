@@ -11,9 +11,12 @@ port = 443
 ssl = true
 type = cloud
 username =
-password =
-project_id =
+password = 
+project_id = 
 output = project
+project_name = semantic
+view_query = select * from sys.project."views"
+table_query = select * from sys.project."tables" 
 ```
 Setup your config.ini file uisng the following for Dremio Software
 
@@ -26,6 +29,9 @@ type = software
 username = dremio
 password = dremio123
 output = project
+project_name = semantic
+view_query = select * from sys."views" 
+table_query = select * from sys."tables"
 ```
 
 ### Running
@@ -33,7 +39,7 @@ output = project
 2. Initiate your dbt project `dbt init <project_name>`
 3. Select `dremio` as the database to use.
 
-python main.py config.ini target
+python main.py -config "config.ini" -target "Dremio Cloud"
 
 - arguments
   - config path
