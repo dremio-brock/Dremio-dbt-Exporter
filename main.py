@@ -312,8 +312,50 @@ def build_project_yaml(self):
         yaml.dump(existing_data, file)
 
 
-def build_source_yaml(self, database, schema, table):
-    pass
+def build_source_yaml(self):
+    # new file path for schema.yaml
+    file_path = self.output + '/' + self.project_name + '/models/schema.yml'
+
+    # define base schema
+    data = {'version': 2,
+            'sources': []
+            }
+
+    # define table list
+    table_list = []
+
+    # generate the schema
+    for table in self.tables:
+
+        # Convert path to a list
+        path_list = ast.literal_eval(
+            '[' + ', '.join(['"' + item.strip() + '"' for item in table['path'][1:-1].split(',')]) + ']')
+
+        table_list.append(path_list)
+
+    path_dict = {}
+
+    for path in table_list:
+
+        name = '_'.join(path[:-1]).replace('"', '').replace('.', '_')
+        database = path[0]
+
+        if name not in path_dict:
+            path_dict[name] = {
+                "name": name,
+                "database": database,
+                "schema": '"' + '"."'.join(path) + '"',
+                "tables": []
+            }
+        path_dict[name]['tables'].append({'name': path[-1]})
+
+    for path in path_dict:
+        data['sources'].append(path_dict[path])
+
+    # Create the new yaml file
+    yaml = ruamel.yaml.YAML()
+    with open(file_path, 'w') as file:
+        yaml.dump(data, file)
 
 
 def build_model(self):
@@ -366,7 +408,7 @@ def build_model(self):
                 #split back into parts
                 table_parts = re.split(r'\.(?=(?:(?:[^"]*"){2})*[^"]*$)', full_table)
 
-                database = table_parts[0]
+                database = '_'.join(table_parts[:-1]).replace('"', '').replace('.', '_')
                 table = table_parts[-1]
                 dbt_ref = table.replace('"', '').replace('.', '_')
 
@@ -430,7 +472,10 @@ if __name__ == "__main__":
     get_filtered_views(dremio_conn)
     print("building model")
     build_model(dremio_conn)
+    print("building source models")
+    build_source_yaml(dremio_conn)
     print("building project_yaml")
     build_project_yaml(dremio_conn)
+
 
 
