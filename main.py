@@ -36,9 +36,12 @@ class DremioConfig:
         self.view_filter = config[config_section]['view_filter']
         self.table_query = config[config_section]['table_query']
         self.table_filter = config[config_section]['table_filter']
+        self.local = config[config_section].getboolean('local')
+        self.local_views = config[config_section]['local_view_json']
+        self.local_tables = config[config_section]['local_table_json']
 
         # create url string
-        if config[config_section]['ssl'] == 'true':
+        if config[config_section].getboolean('ssl'):
             self.url = 'https://'
         else:
             self.url = 'http://'
@@ -248,6 +251,24 @@ def get_filtered_tables(self):
 
     self.filtered_tables = tables
 
+def get_local_tables(self):
+    tableList = []
+    with open(self.local_tables) as f:
+        for jsonObj in f:
+            tableDict = json.loads(jsonObj)
+            tableList.append(tableDict)
+    self.tables = tableList
+    self.filtered_tables = tableList
+
+def get_local_views(self):
+    viewList = []
+    with open(self.local_views) as f:
+        for jsonObj in f:
+            viewDict = json.loads(jsonObj)
+            viewList.append(viewDict)
+    self.views = viewList
+    self.filtered_views = viewList
+
 
 def contains_non_alphanumeric(input_string):
     # Define a regular expression pattern to match non-alphanumeric characters
@@ -358,6 +379,41 @@ def build_source_yaml(self):
         yaml.dump(data, file)
 
 
+def build_schema_models_yaml(self):
+    # open existing yaml
+    file_path = self.output + '/' + self.project_name + '/models/schema.yml'
+
+    # define base model
+    model_data = {'models': []}
+
+    view_list = []
+
+    for view in self.views:
+        # Convert path to a list
+        path_list = ast.literal_eval(
+            '[' + ', '.join(['"' + item.strip() + '"' for item in view['path'][1:-1].split(',')]) + ']')
+
+        model_name = '_'.join(path_list[:-1]).replace('"', '').replace('.', '_')
+        alias = path_list[-1]
+
+        model = { "name": model_name,
+                  "config": [{"alias": alias}]
+                  }
+
+        model_data['models'].append(model)
+
+    # Create the new yaml file
+    yaml = ruamel.yaml.YAML()
+    with open(file_path, 'r') as file:
+        data = yaml.load(file)
+
+    # update the yaml data
+    data.update(model_data)
+
+    # write the yaml file
+    with open(file_path, 'w') as file:
+        yaml.dump(data, file)
+
 def build_model(self):
     # build list of sources
     source_list = []
@@ -464,18 +520,26 @@ if __name__ == "__main__":
 
     # set config
     dremio_conn = DremioConfig(config)
-    print("Getting tables")
-    get_tables(dremio_conn)
-    print("Getting views")
-    get_views(dremio_conn)
-    print("Getting filtered tables")
-    get_filtered_tables(dremio_conn)
-    print("Getting filterd views")
-    get_filtered_views(dremio_conn)
+    if dremio_conn.local:
+        print("Getting local tables")
+        get_local_tables(dremio_conn)
+        print("Getting local views")
+        get_local_views(dremio_conn)
+    else:
+        print("Getting tables")
+        get_tables(dremio_conn)
+        print("Getting views")
+        get_views(dremio_conn)
+        print("Getting filtered tables")
+        get_filtered_tables(dremio_conn)
+        print("Getting filterd views")
+        get_filtered_views(dremio_conn)
     print("building model")
     build_model(dremio_conn)
     print("building source models")
     build_source_yaml(dremio_conn)
+    print("building schema models")
+    build_schema_models_yaml(dremio_conn)
     print("building project_yaml")
     build_project_yaml(dremio_conn)
 
