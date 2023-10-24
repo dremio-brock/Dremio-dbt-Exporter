@@ -412,12 +412,7 @@ def build_model(self):
                 table = table_parts[-1]
                 dbt_ref = table.replace('"', '').replace('.', '_')
 
-                for value in self.dremio_reserved:
-                    # Create a regular expression pattern that matches the reserved word surrounded by backticks
-                    pattern = rf'`({re.escape(value)})`'
 
-                    # Replace using re.sub() with the pattern
-                    new_query = re.sub(pattern, r'"\1"', new_query)
 
                 new_query = new_query.replace("`", '')
 
@@ -429,6 +424,13 @@ def build_model(self):
                     new_query = new_query.replace(query_table, ref)
                 else:
                     print(f'{query_table} failed to match in {model_name}')
+
+                for value in self.dremio_reserved:
+                    # Create a regular expression pattern that matches the reserved word surrounded by backticks
+                    pattern = rf'`({re.escape(value)})`'
+
+                    # Replace using re.sub() with the pattern
+                    new_query = re.sub(pattern, r'"\1"', new_query)
 
         # format sql
         final_sql = sqlparse.format(new_query, reindent=True)
