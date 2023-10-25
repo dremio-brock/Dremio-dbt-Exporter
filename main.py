@@ -393,7 +393,10 @@ def build_schema_models_yaml(self):
         path_list = ast.literal_eval(
             '[' + ', '.join(['"' + item.strip() + '"' for item in view['path'][1:-1].split(',')]) + ']')
 
-        model_name = '_'.join(path_list[:-1]).replace('"', '').replace('.', '_')
+        # join list using _ and replace any quotes
+        model_name = '_'.join(path_list).replace('"', '').replace('.', '_')
+
+        # alias should be the last item in the list (view name)
         alias = path_list[-1]
 
         model = { "name": model_name,
@@ -402,7 +405,7 @@ def build_schema_models_yaml(self):
 
         model_data['models'].append(model)
 
-    # Create the new yaml file
+    # open yaml file
     yaml = ruamel.yaml.YAML()
     with open(file_path, 'r') as file:
         data = yaml.load(file)
